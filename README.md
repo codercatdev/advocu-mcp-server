@@ -14,6 +14,89 @@ A unified MCP (Model Context Protocol) server that enables **both Google Develop
 
 ---
 
+## Hosted access on Cloudflare
+
+Local stdio usage below is unchanged. For remote clients, the repository also includes a
+Cloudflare Worker with Streamable HTTP MCP, a web login/settings page, and per-user D1 storage.
+It uses **Better Auth MCP** (`@better-auth/mcp`, the supported replacement for the
+old `better-auth/plugins/mcp` import), including discovery, dynamic client registration,
+PKCE authorization codes, and explicit user consent.
+
+### Local hosted development
+
+Use Node.js **22.12+** for the Cloudflare/Better Auth tooling (local stdio still supports Node.js 18+).
+
+1. Run `npm install`.
+2. Register a GitHub OAuth application for login, with homepage `http://localhost:8787`
+   and callback `http://localhost:8787/api/auth/callback/github`.
+3. Copy `.dev.vars.example` to `.dev.vars`. Set the GitHub client ID/secret, and generate
+   **two independent secrets** using `openssl rand -base64 32`: one for `BETTER_AUTH_SECRET`,
+   another for `CREDENTIAL_ENCRYPTION_KEY`. Never commit `.dev.vars`.
+4. Run `npm run db:migrate:local`, then `npm run dev:hosted`.
+5. Open `http://localhost:8787`, sign in with GitHub, and save your Advocu token and/or
+   MVP token plus numeric MVP profile ID. Saving replaces both provider connections;
+   blank providers are disconnected. Tokens are never sent back to the browser.
+6. In an OAuth-capable MCP client, add `http://localhost:8787/mcp` as a Streamable HTTP
+   endpoint. The client must support OAuth discovery, PKCE, and dynamic registration.
+   Complete login and review the consent screen. Request the `mcp` scope and resource
+   `http://localhost:8787/mcp`; request `offline_access` as well if the client needs refresh tokens.
+   HTTP is for loopback development only; use HTTPS for deployed clients.
+
+Run `npm run test:hosted` to build and exercise local Workers/D1 authentication, PKCE/refresh,
+credential isolation, documentation, and stdio compatibility. Tests seed application sessions
+and mock provider submissions; completing GitHub login and submitting real activities requires
+your own configured OAuth application and provider accounts.
+
+### Deploy
+
+1. Authenticate Wrangler with `npx wrangler login` and create a database:
+   `npx wrangler d1 create activity-reporting`.
+2. Replace `database_id` in `wrangler.jsonc` with the resulting D1 ID.
+3. Set `vars.BETTER_AUTH_URL` in `wrangler.jsonc` to the exact public **HTTPS origin**
+   (e.g. `https://activity-reporting-mcp.example.workers.dev`, without `/api/auth`).
+   Do not leave the localhost development URL in a deployed Worker.
+4. Register a production GitHub OAuth application with callback
+   `https://YOUR_HOST/api/auth/callback/github`.
+5. Configure secrets using `npx wrangler secret put NAME` for each of
+   `BETTER_AUTH_SECRET`, `CREDENTIAL_ENCRYPTION_KEY`, `GITHUB_CLIENT_ID`, and
+   `GITHUB_CLIENT_SECRET`. Use independent, cryptographically random secrets;
+   `CREDENTIAL_ENCRYPTION_KEY` must be a base64-encoded **32-byte** AES key.
+6. Run `npm run db:migrate:remote`, then `npm run deploy:hosted`.
+7. Visit your HTTPS origin to connect providers and add `https://YOUR_HOST/mcp` to your MCP client.
+
+Back up D1 and the encryption key securely. Changing the encryption key without re-encrypting
+existing rows makes saved connections unreadable; disconnect/reconnect providers after such a change.
+Keep the Better Auth secret stable as it protects sessions, signing keys, and login-provider tokens.
+Migrations in `migrations/0001_auth.sql` were generated from the installed Better Auth configuration;
+generate/review new migrations before upgrading Better Auth.
+
+### Hosted security model and limitations
+
+- GitHub is the **application login**, not authorization to Advocu or Microsoft MVP.
+  Provider tokens must currently be supplied manually; MVP tokens expire and must be replaced
+  in settings. There is no automatic provider OAuth/refresh flow or chat UI in this first version.
+- Provider credentials are encrypted with AES-256-GCM in D1, with a fresh nonce and authenticated
+  user-ID binding. Hosted mode never uses `ADVOCU_*` / `MVP_*` environment credentials or accepts
+  user-supplied provider API URLs. Only connection status is returned by settings endpoints.
+- Every MCP request verifies its OAuth token's signature, issuer, audience, expiry, and `mcp`
+  scope, then creates an isolated server with that user's credentials. Browser session cookies
+  do **not** authenticate `/mcp`. An unconnected account can read documentation but cannot submit activities.
+- MCP is stateless: no shared in-memory sessions, resumable SSE, or server-initiated notifications.
+  Connections are reloaded on every request, so disconnecting immediately prevents new provider calls.
+  Already in-flight submissions cannot be canceled by disconnecting.
+- Access tokens last 15 minutes. Local JWT verification does not immediately revoke issued access
+  tokens when a user signs out or revokes a grant; they remain usable until expiry.
+- The browser interface is same-origin only. Native/server-side OAuth MCP clients are supported;
+  cross-origin browser MCP clients are not enabled. Request bodies are limited to 64 KiB.
+- Better Auth uses database-backed login/OAuth rate limits. A Cloudflare per-user rate limiter
+  allows 30 authenticated MCP requests per minute, enforced per Cloudflare location (not a global
+  provider quota). Public dynamic client registration is enabled for MCP interoperability; for a
+  public deployment, configure Cloudflare WAF/abuse controls and monitor D1 usage.
+- Request/secret logging is disabled in the application. Do not enable request-body, authorization-header,
+  or cookie logging in external monitoring. Hosted provider failures omit raw upstream error bodies.
+- Existing tools and documentation resources are shared across transports. Hosted mode exposes the
+  tools actually registered by the unified server, not additional tools from the legacy standalone servers.
+
 ## 🚀 Quick Start
 
 ### Prerequisites

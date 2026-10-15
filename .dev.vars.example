@@ -1,0 +1,6 @@
+# Copy to .dev.vars for wrangler dev. Never commit real values.
+# Use independent random values: openssl rand -base64 32
+BETTER_AUTH_SECRET=
+CREDENTIAL_ENCRYPTION_KEY=
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=

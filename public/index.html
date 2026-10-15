@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Activity Reporting MCP</title>
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <h1>Activity Reporting MCP</h1>
+      <p>Sign in, connect your provider tokens, then authorize your remote MCP client.</p>
+      <p id="message" role="status"></p>
+      <button id="login" hidden>Sign in with GitHub</button>
+      <section id="account" hidden>
+        <p id="identity"></p>
+        <p>MCP endpoint: <code id="endpoint"></code></p>
+        <h2>Provider connections</h2>
+        <p id="connections"></p>
+        <p>Saving replaces both connections. Leave a provider blank to disconnect it. Tokens are never displayed.</p>
+        <form id="credentials">
+          <p><label>Advocu token <input id="gde" type="password" autocomplete="off" maxlength="16384" /></label></p>
+          <p><label>MVP token <input id="mvp" type="password" autocomplete="off" maxlength="16384" /></label></p>
+          <p><label>MVP profile ID <input id="profile" type="number" min="1" step="1" /></label></p>
+          <button type="submit">Save connections</button>
+          <button id="disconnect" type="button">Disconnect all providers</button>
+        </form>
+        <section id="consent" hidden>
+          <h2>Authorize MCP client</h2>
+          <p id="request"></p>
+          <p>This grants the client access to your documentation and connected activity-submission tools.
+            Only approve clients you trust. Client names are supplied by the client and are not verified.</p>
+          <button id="approve">Approve</button>
+          <button id="deny">Deny</button>
+        </section>
+        <button id="logout">Sign out</button>
+      </section>
+    </main>
+  </body>
+</html>

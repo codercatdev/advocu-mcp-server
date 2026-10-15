@@ -4,7 +4,7 @@
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
   CallToolRequestSchema,
   ErrorCode,
@@ -13,8 +13,6 @@ import {
   McpError,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 
 // GDE imports
 import type {
@@ -40,10 +38,16 @@ import {
 import type { MVPVideoActivity, MVPBlogActivity, MVPSpeakingActivity } from "./interfaces/mvp/index.js";
 import { MVPActivityType, MVPActivityRole, MVPTargetAudience } from "./types/mvp/index.js";
 
-// Get the docs directory from environment variable or fallback
-// IMPORTANT: Set DOCS_DIR in Claude Desktop config to the full path
-// Example: /Users/username/work/mcp-mvp-gde/docs
-const DOCS_DIR = process.env.DOCS_DIR || join(process.cwd(), "docs");
+export interface ProviderCredentials {
+  gde?: { accessToken: string; baseUrl?: string };
+  mvp?: { accessToken: string; userProfileId: number; baseUrl?: string };
+}
+
+export interface ActivityServerOptions {
+  credentials: ProviderCredentials;
+  readDocumentation: (file: string) => Promise<string>;
+  exposeProviderErrors?: boolean;
+}
 
 // Define available documentation resources
 const DOCUMENTATION_RESOURCES = [
@@ -102,6 +106,9 @@ export class UnifiedActivityReportingServer {
    * Extract a meaningful error message from various error types
    */
   private getErrorMessage(error: unknown): string {
+    if (this.options.exposeProviderErrors === false) {
+      return "Provider request failed. Check your connection settings and try again.";
+    }
     if (error instanceof Error) {
       return error.message;
     }
@@ -122,7 +129,7 @@ export class UnifiedActivityReportingServer {
     return JSON.stringify(error);
   }
 
-  constructor() {
+  constructor(private readonly options: ActivityServerOptions) {
     this.server = new Server(
       {
         name: "activity-reporting-server",
@@ -137,39 +144,15 @@ export class UnifiedActivityReportingServer {
     );
 
     // Setup GDE
-    this.gdeAccessToken = process.env.ADVOCU_ACCESS_TOKEN || null;
-    this.gdeBaseUrl = process.env.ADVOCU_API_URL ?? "https://api.advocu.com/personal-api/v1/gde";
+    this.gdeAccessToken = options.credentials.gde?.accessToken || null;
+    this.gdeBaseUrl = options.credentials.gde?.baseUrl ?? "https://api.advocu.com/personal-api/v1/gde";
     this.gdeEnabled = !!this.gdeAccessToken;
 
-    if (!this.gdeEnabled) {
-      console.error("⚠️  ADVOCU_ACCESS_TOKEN not set - GDE tools will be disabled");
-    }
-
     // Setup MVP
-    this.mvpAccessToken = process.env.MVP_ACCESS_TOKEN || null;
-    const mvpProfileId = process.env.MVP_USER_PROFILE_ID || null;
-    this.mvpUserProfileId = mvpProfileId ? Number.parseInt(mvpProfileId, 10) : null;
-    this.mvpBaseUrl = process.env.MVP_API_URL ?? "https://mavenapi-prod.azurewebsites.net/api";
+    this.mvpAccessToken = options.credentials.mvp?.accessToken || null;
+    this.mvpUserProfileId = options.credentials.mvp?.userProfileId ?? null;
+    this.mvpBaseUrl = options.credentials.mvp?.baseUrl ?? "https://mavenapi-prod.azurewebsites.net/api";
     this.mvpEnabled = !!(this.mvpAccessToken && this.mvpUserProfileId);
-
-    if (!this.mvpEnabled) {
-      if (!this.mvpAccessToken) {
-        console.error("⚠️  MVP_ACCESS_TOKEN not set - MVP tools will be disabled");
-      }
-      if (!this.mvpUserProfileId) {
-        console.error("⚠️  MVP_USER_PROFILE_ID not set - MVP tools will be disabled");
-      }
-    }
-
-    if (!this.gdeEnabled && !this.mvpEnabled) {
-      console.error("❌ Neither GDE nor MVP credentials configured. At least one must be set.");
-      process.exit(1);
-    }
-
-    console.error(`✅ Server initialized:`);
-    console.error(`   GDE: ${this.gdeEnabled ? "enabled" : "disabled"}`);
-    console.error(`   MVP: ${this.mvpEnabled ? "enabled" : "disabled"}`);
-    console.error(`   Docs: ${DOCS_DIR}`);
 
     this.setupToolHandlers();
     this.setupResourceHandlers();
@@ -444,8 +427,7 @@ export class UnifiedActivityReportingServer {
 
       try {
         // Read the file from the docs directory
-        const filePath = join(DOCS_DIR, resource.file);
-        const content = await readFile(filePath, "utf-8");
+        const content = await this.options.readDocumentation(resource.file);
 
         return {
           contents: [
@@ -503,8 +485,7 @@ export class UnifiedActivityReportingServer {
 
     try {
       // Read the file
-      const filePath = join(DOCS_DIR, resource.file);
-      const content = await readFile(filePath, "utf-8");
+      const content = await this.options.readDocumentation(resource.file);
 
       return {
         content: [
@@ -619,7 +600,9 @@ export class UnifiedActivityReportingServer {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
+        const errorText = this.options.exposeProviderErrors === false
+          ? "Check the submitted fields and your provider connection."
+          : await response.text();
         let errorMessage = `MVP API error (${response.status})`;
 
         if (response.status === 401) {
@@ -678,7 +661,9 @@ export class UnifiedActivityReportingServer {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
+        const errorText = this.options.exposeProviderErrors === false
+          ? "Check the submitted fields and your provider connection."
+          : await response.text();
         let errorMessage = `GDE API error (${response.status})`;
 
         if (response.status === 401) {
@@ -722,9 +707,11 @@ export class UnifiedActivityReportingServer {
     }
   }
 
-  async run() {
-    const transport = new StdioServerTransport();
+  async connect(transport: Transport) {
     await this.server.connect(transport);
-    console.error("🚀 Unified Activity Reporting MCP Server running");
+  }
+
+  async close() {
+    await this.server.close();
   }
 }

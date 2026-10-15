@@ -2,13 +2,20 @@
   "name": "advocu-mcp-server",
   "description": "Unified MCP Server for Google GDE (Advocu) and Microsoft MVP Activity Reporting",
   "author": "Carlos Azaustre <cazaustre@gmail.com> (https://carlosazaustre.es/)",
-  "contributors": ["Alan Buscaglia (https://gentleman.programming)"],
+  "contributors": [
+    "Alan Buscaglia (https://gentleman.programming)"
+  ],
   "version": "0.1.3",
   "main": "dist/index.js",
   "bin": {
     "advocu-mcp-server": "dist/index.js"
   },
-  "files": ["dist/**/*", "README.md", "LICENSE", "package.json"],
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
   "engines": {
     "node": ">=18.0.0"
   },
@@ -30,7 +37,12 @@
     "release:minor": "standard-version --release-as minor",
     "release:major": "standard-version --release-as major",
     "release:dry-run": "standard-version --dry-run",
-    "postrelease": "git push --follow-tags origin main && npm publish"
+    "postrelease": "git push --follow-tags origin main && npm publish",
+    "dev:hosted": "wrangler dev",
+    "deploy:hosted": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "test:hosted": "npm run build && playwright test tests/hosted.spec.ts --workers=1"
   },
   "keywords": [
     "gde",
@@ -54,6 +66,7 @@
   "license": "MIT",
   "devDependencies": {
     "@biomejs/biome": "2.3.3",
+    "@cloudflare/workers-types": "^5.20261015.1",
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
     "@playwright/test": "^1.56.0",
@@ -64,10 +77,14 @@
     "playwright": "^1.56.0",
     "standard-version": "^9.5.0",
     "tsx": "^4.19.4",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "wrangler": "^4.151.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.21.0",
+    "@better-auth/mcp": "^1.7.10",
+    "@better-auth/oauth-provider": "^1.7.10",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "better-auth": "^1.7.10",
     "dotenv": "^16.5.0"
   },
   "optionalDependencies": {
